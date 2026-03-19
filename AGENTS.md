@@ -97,6 +97,63 @@ pytest tests/ -v
 - First admin is bootstrapped via `INITIAL_ADMIN_ID` env var
 
 ## Deploy
-- GCE e2-micro (free tier): 2 vCPU burst, 1 GB RAM — more than enough
-- GitHub Actions deploys on push to main
-- Secrets needed: `GCP_SA_KEY`, `GCE_VM_NAME`, `GCE_VM_ZONE`, `GCP_PROJECT_ID`, `GCE_USER`
+
+### How deployment works
+Deployment is fully automated via GitHub Actions. **The only way to deploy is to push to `main`.**
+
+There is NO direct SSH access needed. The pipeline handles everything:
+
+1. You edit code locally
+2. `git add` + `git commit` + `git push origin main`
+3. GitHub Actions (`.github/workflows/deploy.yml`) automatically:
+   - Authenticates to GCP via service account key (stored in GitHub Secrets)
+   - Copies updated files to the VM via `gcloud compute scp` (IAP tunnel)
+   - Runs `restart.sh` on the VM which installs deps and restarts the systemd service
+   - Verifies the bot is running
+
+### Step-by-step deploy instructions for agents
+
+```bash
+# 1. Make your code changes in bot/ or other relevant files
+
+# 2. Stage changes (NEVER add .env — it contains secrets)
+git add bot/ tests/ restart.sh requirements.txt
+# Add other changed files as needed, but NEVER .env or data/
+
+# 3. Commit
+git commit -m "Description of changes"
+
+# 4. Push — this triggers the deploy
+git push origin main
+
+# 5. Verify the deploy succeeded
+gh run list --limit 2
+# Both "CI" and "Deploy to GCE" should show "completed success"
+
+# 6. (Optional) Check bot logs on VM
+gcloud compute ssh writebot-vm --zone=us-central1-a --project=writebot-daily \
+  --tunnel-through-iap \
+  --command="sudo journalctl -u writebot --no-pager -n 20"
+```
+
+### Infrastructure details
+- **VM**: GCE e2-micro (free tier) in us-central1-a, project `writebot-daily`
+- **VM name**: `writebot-vm`
+- **Bot runs as**: systemd service `writebot` (auto-restarts on crash)
+- **Mode**: polling (not webhook — no HTTPS/domain needed)
+- **DB file**: `data/writebot.db` on the VM (persists across deploys)
+- **Secrets**: all in GitHub Secrets, none in the repo
+
+### GitHub Secrets (already configured)
+- `GCP_SA_KEY` — service account JSON key
+- `GCE_VM_NAME` — `writebot-vm`
+- `GCE_VM_ZONE` — `us-central1-a`
+- `GCP_PROJECT_ID` — `writebot-daily`
+- `GCE_USER` — `ilya`
+
+### Important rules
+- **NEVER commit `.env`** — it's in `.gitignore` and contains the bot token
+- **NEVER commit `data/`** — contains the production SQLite database
+- `.env` on the VM is separate from the repo and persists across deploys
+- If you need to change env vars on the VM, SSH in and edit `~/writebot/.env` directly
+- CI runs tests with dummy tokens — real secrets are only on the VM

@@ -6,7 +6,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
-from bot.config import BOT_TOKEN, DISCUSSION_GROUP_ID, PORT, WEBAPP_URL, WEBHOOK_ALLOWED_UPDATES, WEBHOOK_PATH
+from bot.config import BOT_TOKEN, PORT, WEBAPP_URL, WEBHOOK_ALLOWED_UPDATES, WEBHOOK_PATH
 from bot.db.models import init_db
 from bot.handlers import admin, channel, group, membership, private
 from bot.services.scheduler import start_scheduler
@@ -74,10 +74,6 @@ async def run_polling():
 
     await init_db()
     await bot.delete_webhook(drop_pending_updates=True)
-
-    # ONE-TIME TEST: remove after verifying deploy pipeline
-    await bot.send_message(DISCUSSION_GROUP_ID, "тест")
-    logger.info("Sent test message to discussion group")
 
     scheduler_task = asyncio.create_task(start_scheduler(bot))
     logger.info("Starting polling mode")
