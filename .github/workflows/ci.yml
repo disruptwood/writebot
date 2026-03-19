@@ -3,14 +3,22 @@ name: CI
 on:
   push:
     branches: [main]
-    paths: ['writebot/**']
+    paths:
+      - 'bot/**'
+      - 'tests/**'
+      - '.github/workflows/ci.yml'
+      - 'requirements.txt'
+      - 'requirements-dev.txt'
+      - 'pytest.ini'
   pull_request:
     branches: [main]
-    paths: ['writebot/**']
-
-defaults:
-  run:
-    working-directory: writebot
+    paths:
+      - 'bot/**'
+      - 'tests/**'
+      - '.github/workflows/ci.yml'
+      - 'requirements.txt'
+      - 'requirements-dev.txt'
+      - 'pytest.ini'
 
 jobs:
   lint-and-test:

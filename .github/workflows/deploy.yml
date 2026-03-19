@@ -3,12 +3,14 @@ name: Deploy to GCE
 on:
   push:
     branches: [main]
-    paths: ['writebot/**']
+    paths:
+      - 'bot/**'
+      - '.github/workflows/deploy.yml'
+      - 'requirements.txt'
+      - 'start.sh'
+      - 'restart.sh'
+      - 'Dockerfile'
   workflow_dispatch:
-
-defaults:
-  run:
-    working-directory: writebot
 
 env:
   VM_NAME: ${{ secrets.GCE_VM_NAME }}
@@ -36,8 +38,8 @@ jobs:
 
       - name: Deploy files to VM
         run: |
-          gcloud compute scp --recurse \
-            bot/ requirements.txt start.sh restart.sh Dockerfile \
+          gcloud compute scp --recurse --tunnel-through-iap \
+            bot/ requirements.txt start.sh restart.sh \
             ${{ secrets.GCE_USER }}@${VM_NAME}:${DEPLOY_DIR}/ \
             --zone=${VM_ZONE}
 
@@ -45,6 +47,7 @@ jobs:
         run: |
           gcloud compute ssh ${{ secrets.GCE_USER }}@${VM_NAME} \
             --zone=${VM_ZONE} \
+            --tunnel-through-iap \
             --command="cd ${DEPLOY_DIR} && bash restart.sh"
 
       - name: Verify bot is running
@@ -52,4 +55,5 @@ jobs:
           sleep 3
           gcloud compute ssh ${{ secrets.GCE_USER }}@${VM_NAME} \
             --zone=${VM_ZONE} \
-            --command="pgrep -f 'python.*-m bot' && echo 'Bot is running' || echo 'Bot failed to start'"
+            --tunnel-through-iap \
+            --command="sudo systemctl is-active writebot && echo 'Bot is running' || echo 'Bot failed to start'"

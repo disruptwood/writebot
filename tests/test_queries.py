@@ -2,10 +2,10 @@
 
 from datetime import datetime
 
-import pytest
+import pytest_asyncio
 
 
-@pytest.fixture(autouse=True)
+@pytest_asyncio.fixture(autouse=True)
 async def setup_db(tmp_path):
     """Use a temp file DB for each test."""
     db_path = str(tmp_path / "test.db")
@@ -112,6 +112,79 @@ class TestMemberQueries:
         missing = await get_missing_today("2024-01-15")
         assert len(missing) == 1
         assert missing[0]["user_id"] == 200
+
+    async def test_pending_member_and_promotion_queue(self):
+        from bot.db.queries import (
+            create_or_update_pending_member,
+            get_members_pending_promotion,
+            get_pending_members,
+            set_member_channel_admin,
+            activate_member,
+        )
+
+        await create_or_update_pending_member(100, "alice", "Alice", "A")
+        pending = await get_pending_members()
+        assert len(pending) == 1
+        assert pending[0]["status"] == "pending"
+
+        await activate_member(100, "alice", "Alice", "A", source="test_activation")
+        queued = await get_members_pending_promotion()
+        assert len(queued) == 1
+        assert queued[0]["user_id"] == 100
+
+        await set_member_channel_admin(100, True, source="test_promotion")
+        assert await get_members_pending_promotion() == []
+
+    async def test_rejoin_resets_progress(self):
+        from bot.db.queries import (
+            activate_member,
+            get_member,
+            get_streak,
+            get_user_post_dates,
+            mark_member_status,
+            update_streak,
+            upsert_daily_participation,
+        )
+
+        await activate_member(
+            100,
+            "alice",
+            "Alice",
+            "A",
+            source="initial_join",
+        )
+        await upsert_daily_participation(100, "2024-01-15", 10)
+        await update_streak(100, "alice", "Alice", 1, 3, "2024-01-15")
+
+        await mark_member_status(100, "kicked", source="test_kick")
+        await activate_member(
+            100,
+            "alice",
+            "Alice",
+            "A",
+            source="rejoin",
+        )
+
+        member = await get_member(100)
+        assert member is not None
+        assert member["status"] == "active"
+        assert member["is_active"] == 1
+        assert member["is_channel_admin"] == 0
+        assert await get_user_post_dates(100) == []
+        assert await get_streak(100) is None
+
+    async def test_signature_lookup_requires_unique_match(self):
+        from bot.db.queries import activate_member, find_members_by_author_signature
+
+        await activate_member(100, "alice", "Alice", "Smith", source="join")
+        await activate_member(200, "bob", "Bob", "Stone", source="join")
+
+        matches = await find_members_by_author_signature("Alice Smith")
+        assert [member["user_id"] for member in matches] == [100]
+
+        await activate_member(300, None, "Alice", "Smith", source="join")
+        matches = await find_members_by_author_signature("Alice Smith")
+        assert sorted(member["user_id"] for member in matches) == [100, 300]
 
 
 class TestStreakQueries:

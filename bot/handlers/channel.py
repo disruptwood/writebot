@@ -1,7 +1,7 @@
 """Handler for channel_post updates — tracks who writes in the channel."""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from aiogram import Router, types
@@ -19,30 +19,52 @@ def _get_local_date() -> str:
     return datetime.now(ZoneInfo(TIMEZONE)).date().isoformat()
 
 
+async def _resolve_post_author(message: types.Message) -> tuple[dict | None, str | None]:
+    user = message.from_user
+    if user and not user.is_bot:
+        return {
+            "user_id": user.id,
+            "username": user.username,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        }, "from_user"
+
+    author_signature = message.author_signature
+    if author_signature:
+        matches = await queries.find_members_by_author_signature(author_signature)
+        if len(matches) == 1:
+            return matches[0], "author_signature"
+        if len(matches) > 1:
+            logger.warning(
+                "Ambiguous author_signature for channel post: %r -> %s matches",
+                author_signature,
+                len(matches),
+            )
+
+    return None, None
+
+
 @router.channel_post()
 async def on_channel_post(message: types.Message):
     """Track every post in the monitored channel."""
     if not message.chat or message.chat.id != CHANNEL_ID:
         return
 
-    user = message.from_user
     author_signature = message.author_signature  # display name string, may be None
     char_count = len(message.text or message.caption or "")
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     today = _get_local_date()
+    resolved_user, resolved_via = await _resolve_post_author(message)
 
-    if not user:
-        # Posted "as channel" — no user_id available.
-        # Log everything we have so we can debug attribution.
+    if not resolved_user:
         logger.warning(
-            "Channel post WITHOUT from_user: message_id=%s, "
+            "Channel post WITHOUT resolved user: message_id=%s, "
             "author_signature=%r, sender_chat=%s, chars=%d",
             message.message_id,
             author_signature,
             message.sender_chat.id if message.sender_chat else None,
             char_count,
         )
-        # Still save the raw post for audit trail
         await queries.record_post(
             message_id=message.message_id,
             user_id=None,
@@ -54,33 +76,35 @@ async def on_channel_post(message: types.Message):
         )
         return
 
-    user_id = user.id
-    username = user.username
-    first_name = user.first_name
+    user_id = resolved_user["user_id"]
+    username = resolved_user.get("username")
+    first_name = resolved_user.get("first_name")
+    last_name = resolved_user.get("last_name")
 
-    # Record the raw post
     await queries.record_post(
         message_id=message.message_id,
         user_id=user_id,
         username=username,
         first_name=first_name,
+        last_name=last_name,
         author_signature=author_signature,
         posted_at=now,
         char_count=char_count,
+        resolved_via=resolved_via,
     )
 
-    # Update daily participation
     await queries.upsert_daily_participation(user_id, today, char_count)
+    await queries.upsert_member(user_id, username, first_name, last_name)
 
-    # Ensure user is in members table
-    await queries.upsert_member(user_id, username, first_name)
-
-    # Recalculate streak
     post_dates = await queries.get_user_post_dates(user_id)
     current, longest = calculate_streak(post_dates, today)
     await queries.update_streak(user_id, username, first_name, current, longest, today)
 
     logger.info(
-        "Tracked post from %s (user_id=%s), streak=%d, date=%s",
-        username or first_name, user_id, current, today,
+        "Tracked post from %s (user_id=%s), streak=%d, date=%s, resolved_via=%s",
+        username or first_name,
+        user_id,
+        current,
+        today,
+        resolved_via,
     )
