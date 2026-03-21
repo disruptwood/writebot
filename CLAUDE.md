@@ -22,16 +22,28 @@ writebot/
       group.py          — discussion group commands (/stats, /streak, etc.)
       private.py        — /start, /mystats in DM
       admin.py          — admin commands (/addadmin, /kick_inactive)
+      membership.py     — join request + member status lifecycle
     db/
-      models.py         — SQLite schema init
-      queries.py        — all DB queries
+      models.py         — SQLite schema init + migrations
+      queries.py        — all DB queries (parameterized)
     services/
       streaks.py        — pure streak calculation (testable, no I/O)
-      scheduler.py      — daily summary background task
+      scheduler.py      — evening warnings + midnight enforcement loop
+      enforcement.py    — compliance rules (grace period, kick logic)
+      channel_members.py — member promotion, invite links, formatting
   tests/
-    conftest.py         — fixtures (temp DB, env setup)
-    test_streaks.py     — unit tests for streak logic
-    test_queries.py     — integration tests for DB queries
+    conftest.py                  — fixtures (temp DB, Telegram mock factories)
+    test_streaks.py              — unit: streak calculation logic
+    test_enforcement.py          — unit: compliance rules (missing, kick eligibility)
+    test_queries.py              — integration: all DB queries
+    test_channel_handler.py      — handler: channel post tracking with mocked Telegram
+    test_group_handler.py        — handler: /stats, /missing, /streak, /leaderboard
+    test_private_handler.py      — handler: /start, /mystats
+    test_admin_handler.py        — handler: /addadmin, /removeadmin, /invite_link
+    test_membership_handler.py   — handler: join requests, member status changes
+    test_channel_members_service.py — service: promotion, invite links, sync
+    test_scheduler.py            — unit: job scheduling logic (monkeypatched)
+    test_scheduler_full.py       — integration: warnings + kicks with real DB
   .github/workflows/
     ci.yml              — lint + test on push/PR
     deploy.yml          — deploy to GCE on push to main
@@ -59,7 +71,9 @@ writebot/
 - `channel_posts`: raw log of every channel post
 - `daily_participation`: one row per user per day (aggregated)
 - `streaks`: cached current/longest streak per user
-- `members`: tracked channel members
+- `members`: tracked channel members (with status lifecycle: pending → active → left/kicked)
+- `bot_state`: key-value store for scheduler state and cached data
+- `member_events`: audit log of all member status changes
 
 ## Environment variables (.env)
 ```
@@ -87,6 +101,31 @@ python -m bot
 pip install -r requirements.txt -r requirements-dev.txt
 pytest tests/ -v
 ```
+
+### Test architecture
+Tests use **mock Telegram objects** so the full bot logic can be tested without
+a real Telegram account or network. Key design:
+
+- `conftest.py` provides factories: `make_user()`, `make_message()`, `make_bot()`,
+  `make_chat()`, `make_join_request()`, `make_chat_member_updated()`
+- Each test gets a **fresh temporary SQLite DB** (via `setup_db` auto-fixture)
+- Handlers are called directly (not through aiogram dispatcher), with mock
+  `message.answer()` / `bot.send_message()` to verify responses
+- No network calls — all Bot API methods are `AsyncMock`
+
+### What's covered (115 tests)
+| Area | Tests | What's verified |
+|------|-------|-----------------|
+| Streak calculation | 12 | Consecutive days, gaps, duplicates, edge cases |
+| DB queries | 15 | CRUD for admins, posts, members, streaks, state |
+| Enforcement rules | 8 | Missing today, grace period, kick eligibility |
+| Channel post handler | 7 | Post tracking, author resolution, wrong channel, bots |
+| Group commands | 9 | /stats, /missing, /streak, /leaderboard |
+| Private commands | 3 | /start, /mystats |
+| Admin commands | 7 | /addadmin, /removeadmin, /invite_link, bootstrap |
+| Membership handler | 7 | Join requests, joins, leaves, kicks, edge cases |
+| Channel members service | 11 | Formatting, promotion, sync, invite links |
+| Scheduler | 5 | Job timing, warnings, enforcement with real DB |
 
 ## Key behaviors
 - Bot must be **admin** in both channel and discussion group
