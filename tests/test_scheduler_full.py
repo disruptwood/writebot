@@ -53,6 +53,7 @@ class TestSendEveningWarning:
         """Members overdue for 2+ days should get kick warning in addition to missing warning."""
         await queries.activate_member(CH, 100, "alice", "Alice", source="test",
                                       joined_at=datetime(2024, 1, 10, tzinfo=ZoneInfo("UTC")))
+        await queries.upsert_daily_participation(CH, 100, "2024-01-12", 50)
         await queries.update_streak(CH, 100, "alice", "Alice", 0, 1, "2024-01-12")
 
         bot = make_bot()
@@ -110,6 +111,7 @@ class TestRunMidnightEnforcement:
         """When all members posted recently, no one is kicked."""
         await queries.activate_member(CH, 100, "alice", "Alice", source="test",
                                       joined_at=datetime(2024, 1, 1, tzinfo=ZoneInfo("UTC")))
+        await queries.upsert_daily_participation(CH, 100, "2024-01-15", 50)
         await queries.update_streak(CH, 100, "alice", "Alice", 1, 1, "2024-01-15")
 
         bot = make_bot()

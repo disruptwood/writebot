@@ -141,7 +141,7 @@ Tests use **mock Telegram objects** — no network calls. Key design:
 - Streaks are calculated in configured timezone (default: Asia/Jerusalem)
 - Scheduler runs independently per channel (22:30 warning, 00:00 enforcement)
 - First admin is bootstrapped via `INITIAL_ADMIN_ID` env var
-- A user in two channels = two independent member records with separate streaks
+- **Cross-channel streaks**: if a user is a member of both channels, posting in either one counts toward their streak. A post in channel A also updates the streak record in channel B. This means dual-channel members only need to write once per day in any channel to maintain their streak. Enforcement (`/missing`, evening warnings, midnight kicks) also checks cross-channel — posting in any channel satisfies the daily requirement. Per-channel data (members, `/stats` writers list) remains independent. This was done because few users will be in both channels, so a simple cross-channel `SELECT DISTINCT date` on `daily_participation` is sufficient
 
 ## Deploy
 - GCE e2-micro (free tier): 2 vCPU burst, 1 GB RAM

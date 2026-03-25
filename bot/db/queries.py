@@ -211,6 +211,27 @@ async def get_user_post_dates(channel_id: int, user_id: int) -> list[str]:
             return [row[0] for row in await cursor.fetchall()]
 
 
+async def get_user_post_dates_cross_channel(user_id: int) -> list[str]:
+    """Get all dates user posted in ANY channel (for cross-channel streaks)."""
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        async with db.execute(
+            "SELECT DISTINCT date FROM daily_participation WHERE user_id = ? ORDER BY date",
+            (user_id,),
+        ) as cursor:
+            return [row[0] for row in await cursor.fetchall()]
+
+
+async def get_user_channel_ids(user_id: int) -> list[int]:
+    """Get all channel_ids where user is an active member."""
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        async with db.execute(
+            """SELECT channel_id FROM members
+               WHERE user_id = ? AND is_active = 1 AND status = 'active'""",
+            (user_id,),
+        ) as cursor:
+            return [row[0] for row in await cursor.fetchall()]
+
+
 async def update_streak(
     channel_id: int,
     user_id: int,
@@ -578,13 +599,14 @@ async def get_today_writers(channel_id: int, today: str) -> list[dict]:
 
 
 async def get_missing_today(channel_id: int, today: str) -> list[dict]:
+    """Members of this channel who haven't posted in ANY channel today."""
     async with aiosqlite.connect(config.DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             """SELECT m.user_id, m.username, m.first_name, m.last_name
                FROM members m
                LEFT JOIN daily_participation dp
-                 ON m.channel_id = dp.channel_id AND m.user_id = dp.user_id AND dp.date = ?
+                 ON m.user_id = dp.user_id AND dp.date = ?
                WHERE m.channel_id = ? AND m.is_active = 1
                  AND m.status = 'active'
                  AND dp.user_id IS NULL
@@ -595,14 +617,19 @@ async def get_missing_today(channel_id: int, today: str) -> list[dict]:
 
 
 async def get_member_compliance_snapshots(channel_id: int) -> list[dict]:
+    """Get compliance data using cross-channel last_post_date."""
     async with aiosqlite.connect(config.DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             """SELECT m.user_id, m.username, m.first_name, m.last_name,
                       m.joined_date, m.joined_at, m.is_channel_admin,
-                      s.last_post_date
+                      lp.last_post_date
                FROM members m
-               LEFT JOIN streaks s ON m.channel_id = s.channel_id AND m.user_id = s.user_id
+               LEFT JOIN (
+                   SELECT user_id, MAX(date) AS last_post_date
+                   FROM daily_participation
+                   GROUP BY user_id
+               ) lp ON m.user_id = lp.user_id
                WHERE m.channel_id = ? AND m.is_active = 1 AND m.status = 'active'
                ORDER BY m.joined_at, m.user_id""",
             (channel_id,),

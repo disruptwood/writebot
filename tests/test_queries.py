@@ -4,9 +4,10 @@ from datetime import datetime
 
 import pytest_asyncio
 
-from tests.conftest import TEST_CHANNEL_ID
+from tests.conftest import TEST_CHANNEL_ID, TEST_CHANNEL_ID_2
 
 CH = TEST_CHANNEL_ID
+CH2 = TEST_CHANNEL_ID_2
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -18,11 +19,18 @@ async def setup_db(tmp_path):
     from bot.config import ChannelConfig
 
     config.DB_PATH = db_path
-    config.CHANNELS = [ChannelConfig(
-        slug="test", channel_id=CH, discussion_group_id=-1009876543210,
-        reminder_chat_id=-1009876543210, name="Test", invite_link_name="test-main",
-        private_commands=True, manual_member_ids=[],
-    )]
+    config.CHANNELS = [
+        ChannelConfig(
+            slug="test", channel_id=CH, discussion_group_id=-1009876543210,
+            reminder_chat_id=-1009876543210, name="Test", invite_link_name="test-main",
+            private_commands=True, manual_member_ids=[],
+        ),
+        ChannelConfig(
+            slug="test2", channel_id=CH2, discussion_group_id=-1009876543211,
+            reminder_chat_id=-1009876543211, name="Test 2", invite_link_name="test2-main",
+            private_commands=False, manual_member_ids=[],
+        ),
+    ]
     config._CHANNEL_BY_CHANNEL_ID = {ch.channel_id: ch for ch in config.CHANNELS}
     config._CHANNEL_BY_GROUP_ID = {ch.discussion_group_id: ch for ch in config.CHANNELS}
     config.ALL_CHANNEL_IDS = {ch.channel_id for ch in config.CHANNELS}
@@ -226,3 +234,112 @@ class TestBotState:
         await set_state("key", "value1")
         await set_state("key", "value2")
         assert await get_state("key") == "value2"
+
+
+class TestCrossChannelStreaks:
+    """Cross-channel streak sharing: posts in any channel count toward streaks."""
+
+    async def test_post_dates_cross_channel_aggregates_both(self):
+        """get_user_post_dates_cross_channel returns dates from all channels."""
+        from bot.db.queries import upsert_daily_participation, get_user_post_dates_cross_channel
+
+        await upsert_daily_participation(CH, 100, "2024-01-15", 10)
+        await upsert_daily_participation(CH2, 100, "2024-01-16", 20)
+
+        dates = await get_user_post_dates_cross_channel(100)
+        assert dates == ["2024-01-15", "2024-01-16"]
+
+    async def test_post_dates_per_channel_stays_filtered(self):
+        """get_user_post_dates still returns only the specified channel's dates."""
+        from bot.db.queries import upsert_daily_participation, get_user_post_dates
+
+        await upsert_daily_participation(CH, 100, "2024-01-15", 10)
+        await upsert_daily_participation(CH2, 100, "2024-01-16", 20)
+
+        assert await get_user_post_dates(CH, 100) == ["2024-01-15"]
+        assert await get_user_post_dates(CH2, 100) == ["2024-01-16"]
+
+    async def test_same_day_both_channels_deduped(self):
+        """Posting in both channels on the same day counts as one day."""
+        from bot.db.queries import upsert_daily_participation, get_user_post_dates_cross_channel
+
+        await upsert_daily_participation(CH, 100, "2024-01-15", 10)
+        await upsert_daily_participation(CH2, 100, "2024-01-15", 20)
+
+        dates = await get_user_post_dates_cross_channel(100)
+        assert dates == ["2024-01-15"]
+
+    async def test_missing_today_cross_channel(self):
+        """Posting in another channel today means not missing in this channel."""
+        from bot.db.queries import upsert_member, upsert_daily_participation, get_missing_today
+
+        await upsert_member(CH, 100, "alice", "Alice")
+        # Alice only posted in CH2, not in CH
+        await upsert_daily_participation(CH2, 100, "2024-01-15", 10)
+
+        missing = await get_missing_today(CH, "2024-01-15")
+        # Alice should NOT be missing — she posted in the other channel
+        assert not any(m["user_id"] == 100 for m in missing)
+
+    async def test_missing_today_no_posts_anywhere(self):
+        """Member who posted nowhere is still missing."""
+        from bot.db.queries import upsert_member, get_missing_today
+
+        await upsert_member(CH, 100, "alice", "Alice")
+
+        missing = await get_missing_today(CH, "2024-01-15")
+        assert any(m["user_id"] == 100 for m in missing)
+
+    async def test_compliance_snapshot_cross_channel_last_post(self):
+        """Compliance snapshot uses the latest post date across all channels."""
+        from bot.db.queries import (
+            activate_member, upsert_daily_participation, get_member_compliance_snapshots,
+        )
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        await activate_member(CH, 100, "alice", "Alice", source="test",
+                              joined_at=datetime(2024, 1, 1, tzinfo=ZoneInfo("UTC")))
+        # Post in CH on day 10, post in CH2 on day 15
+        await upsert_daily_participation(CH, 100, "2024-01-10", 10)
+        await upsert_daily_participation(CH2, 100, "2024-01-15", 20)
+
+        snapshots = await get_member_compliance_snapshots(CH)
+        alice = next(s for s in snapshots if s["user_id"] == 100)
+        # Should see the latest date across channels
+        assert alice["last_post_date"] == "2024-01-15"
+
+    async def test_get_user_channel_ids(self):
+        """get_user_channel_ids returns all channels where user is active."""
+        from bot.db.queries import activate_member, get_user_channel_ids
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        joined = datetime(2024, 1, 1, tzinfo=ZoneInfo("UTC"))
+        await activate_member(CH, 100, "alice", "Alice", source="test", joined_at=joined)
+        await activate_member(CH2, 100, "alice", "Alice", source="test", joined_at=joined)
+
+        channel_ids = await get_user_channel_ids(100)
+        assert sorted(channel_ids) == sorted([CH, CH2])
+
+    async def test_reset_progress_only_affects_one_channel(self):
+        """Resetting progress in one channel doesn't touch the other."""
+        from bot.db.queries import (
+            activate_member, upsert_daily_participation,
+            get_user_post_dates, mark_member_status,
+        )
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        joined = datetime(2024, 1, 1, tzinfo=ZoneInfo("UTC"))
+        await activate_member(CH, 100, "alice", "Alice", source="test", joined_at=joined)
+        await activate_member(CH2, 100, "alice", "Alice", source="test", joined_at=joined)
+        await upsert_daily_participation(CH, 100, "2024-01-15", 10)
+        await upsert_daily_participation(CH2, 100, "2024-01-15", 20)
+
+        # Kick from CH and rejoin — only CH progress should reset
+        await mark_member_status(CH, 100, "kicked", source="test")
+        await activate_member(CH, 100, "alice", "Alice", source="rejoin", joined_at=joined)
+
+        assert await get_user_post_dates(CH, 100) == []
+        assert await get_user_post_dates(CH2, 100) == ["2024-01-15"]
