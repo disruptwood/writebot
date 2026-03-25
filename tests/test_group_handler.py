@@ -37,8 +37,8 @@ class TestCmdStats:
     async def test_stats_empty(self):
         msg = _group_message()
         await cmd_stats(msg)
-        msg.answer.assert_called_once()
-        assert config.STRINGS["stats_empty"] in msg.answer.call_args[0][0]
+        msg.reply.assert_called_once()
+        assert config.STRINGS["stats_empty"] in msg.reply.call_args[0][0]
 
     async def test_stats_with_writers(self):
         await queries.upsert_member(100, "alice", "Alice")
@@ -51,7 +51,7 @@ class TestCmdStats:
         msg = _group_message()
         await cmd_stats(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "1/2" in response
         assert "@alice" in response
 
@@ -67,7 +67,7 @@ class TestCmdMissing:
         msg = _group_message()
         await cmd_missing(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "Все написали" in response
 
     async def test_some_missing(self):
@@ -81,7 +81,7 @@ class TestCmdMissing:
         msg = _group_message()
         await cmd_missing(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "@bob" in response
         assert "@alice" not in response
 
@@ -93,7 +93,7 @@ class TestCmdStreak:
 
         await cmd_streak(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "Alice" in response
         assert "нет стрика" in response
 
@@ -104,7 +104,7 @@ class TestCmdStreak:
         msg = _group_message(from_user=user)
         await cmd_streak(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "5" in response
         assert "10" in response
 
@@ -114,7 +114,7 @@ class TestCmdStreak:
 
         await cmd_streak(msg)
 
-        msg.answer.assert_not_called()
+        msg.reply.assert_not_called()
 
 
 class TestCmdLeaderboard:
@@ -122,7 +122,7 @@ class TestCmdLeaderboard:
         msg = _group_message()
         await cmd_leaderboard(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "нет стриков" in response
 
     async def test_leaderboard_with_data(self):
@@ -132,7 +132,7 @@ class TestCmdLeaderboard:
         msg = _group_message()
         await cmd_leaderboard(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "Топ" in response
         assert "@alice" in response
         assert "@bob" in response
@@ -145,5 +145,5 @@ class TestCmdLeaderboard:
         msg = _group_message()
         await cmd_leaderboard(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "нет стриков" in response

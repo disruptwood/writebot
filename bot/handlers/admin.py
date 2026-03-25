@@ -44,28 +44,28 @@ async def _check_admin(message: types.Message) -> bool:
 async def cmd_add_admin(message: types.Message):
     """Add a bot admin. Usage: /addadmin (reply to user's message)."""
     if not await _check_admin(message):
-        await message.answer(STRINGS["not_admin"])
+        await message.reply(STRINGS["not_admin"])
         return
 
     if not message.reply_to_message or not message.reply_to_message.from_user:
-        await message.answer("Ответьте на сообщение пользователя, которого хотите сделать админом.")
+        await message.reply("Ответьте на сообщение пользователя, которого хотите сделать админом.")
         return
 
     target = message.reply_to_message.from_user
     await queries.add_admin(target.id, target.username, target.first_name, message.from_user.id)
     name = f"@{target.username}" if target.username else target.first_name
-    await message.answer(STRINGS["admin_added"].format(name=name))
+    await message.reply(STRINGS["admin_added"].format(name=name))
 
 
 @router.message(Command("removeadmin"))
 async def cmd_remove_admin(message: types.Message):
     """Remove a bot admin. Usage: /removeadmin (reply to user's message)."""
     if not await _check_admin(message):
-        await message.answer(STRINGS["not_admin"])
+        await message.reply(STRINGS["not_admin"])
         return
 
     if not message.reply_to_message or not message.reply_to_message.from_user:
-        await message.answer("Ответьте на сообщение пользователя, которого хотите убрать из админов.")
+        await message.reply("Ответьте на сообщение пользователя, которого хотите убрать из админов.")
         return
 
     target = message.reply_to_message.from_user
@@ -73,27 +73,27 @@ async def cmd_remove_admin(message: types.Message):
     name = f"@{target.username}" if target.username else target.first_name
 
     if removed:
-        await message.answer(STRINGS["admin_removed"].format(name=name))
+        await message.reply(STRINGS["admin_removed"].format(name=name))
     else:
-        await message.answer(f"{name} не является админом.")
+        await message.reply(f"{name} не является админом.")
 
 
 @router.message(Command("invite_link"))
 async def cmd_invite_link(message: types.Message, bot: Bot):
     """Show the bot-owned join-request invite link."""
     if not await _check_admin(message):
-        await message.answer(STRINGS["not_admin"])
+        await message.reply(STRINGS["not_admin"])
         return
 
     invite_link = await ensure_main_invite_link(bot)
-    await message.answer(STRINGS["invite_link"].format(invite_link=invite_link))
+    await message.reply(STRINGS["invite_link"].format(invite_link=invite_link))
 
 
 @router.message(Command("debug_channel"))
 async def cmd_debug_channel(message: types.Message, bot: Bot):
     """Show diagnostic info about channel/group setup. Admin only."""
     if not await _check_admin(message):
-        await message.answer(STRINGS["not_admin"])
+        await message.reply(STRINGS["not_admin"])
         return
 
     lines = [
@@ -139,4 +139,4 @@ async def cmd_debug_channel(message: types.Message, bot: Bot):
     if invite_link:
         lines.append(f"Main invite link: {invite_link}")
 
-    await message.answer("\n".join(lines))
+    await message.reply("\n".join(lines))

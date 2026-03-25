@@ -12,7 +12,7 @@ router.message.filter(F.chat.type == "private")
 
 @router.message(CommandStart())
 async def cmd_start(message: types.Message):
-    await message.answer(STRINGS["welcome"])
+    await message.reply(STRINGS["welcome"])
 
 
 @router.message(Command("mystats"))
@@ -25,10 +25,10 @@ async def cmd_mystats(message: types.Message):
     name = message.from_user.first_name or "Аноним"
 
     if not streak or streak["current_streak"] == 0:
-        await message.answer(STRINGS["no_streak"].format(name=name))
+        await message.reply(STRINGS["no_streak"].format(name=name))
         return
 
-    await message.answer(STRINGS["streak"].format(
+    await message.reply(STRINGS["streak"].format(
         name=name,
         current=streak["current_streak"],
         longest=streak["longest_streak"],

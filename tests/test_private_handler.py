@@ -23,7 +23,7 @@ class TestCmdStart:
         msg = _private_message()
         await cmd_start(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert config.STRINGS["welcome"] == response
 
 
@@ -34,7 +34,7 @@ class TestCmdMystats:
 
         await cmd_mystats(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "нет стрика" in response
 
     async def test_with_streak(self):
@@ -44,7 +44,7 @@ class TestCmdMystats:
         msg = _private_message(from_user=user)
         await cmd_mystats(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "3" in response
         assert "7" in response
 
@@ -54,4 +54,4 @@ class TestCmdMystats:
 
         await cmd_mystats(msg)
 
-        msg.answer.assert_not_called()
+        msg.reply.assert_not_called()

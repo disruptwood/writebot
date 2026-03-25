@@ -35,12 +35,12 @@ async def cmd_stats(message: types.Message):
     members = await queries.get_active_members()
 
     if not writers:
-        await message.answer(STRINGS["stats_empty"])
+        await message.reply(STRINGS["stats_empty"])
         return
 
     text = STRINGS["stats"].format(today_count=len(writers), total=len(members))
     names = ", ".join(_display_name(w) for w in writers)
-    await message.answer(f"{text}\n{names}")
+    await message.reply(f"{text}\n{names}")
 
 
 @router.message(Command("missing"))
@@ -50,11 +50,11 @@ async def cmd_missing(message: types.Message):
     missing = await queries.get_missing_today(today)
 
     if not missing:
-        await message.answer("Все написали сегодня! 🎉")
+        await message.reply("Все написали сегодня! 🎉")
         return
 
     names = "\n".join(f"  • {_display_name(m)}" for m in missing)
-    await message.answer(f"{STRINGS['missing_header']}\n{names}")
+    await message.reply(f"{STRINGS['missing_header']}\n{names}")
 
 
 @router.message(Command("streak"))
@@ -67,10 +67,10 @@ async def cmd_streak(message: types.Message):
     name = message.from_user.first_name or "Аноним"
 
     if not streak or streak["current_streak"] == 0:
-        await message.answer(STRINGS["no_streak"].format(name=name))
+        await message.reply(STRINGS["no_streak"].format(name=name))
         return
 
-    await message.answer(STRINGS["streak"].format(
+    await message.reply(STRINGS["streak"].format(
         name=name,
         current=streak["current_streak"],
         longest=streak["longest_streak"],
@@ -83,7 +83,7 @@ async def cmd_leaderboard(message: types.Message):
     leaders = await queries.get_leaderboard(limit=10)
 
     if not leaders:
-        await message.answer("Пока нет стриков. Начните писать!")
+        await message.reply("Пока нет стриков. Начните писать!")
         return
 
     lines = [STRINGS["leaderboard_header"]]
@@ -91,4 +91,4 @@ async def cmd_leaderboard(message: types.Message):
         name = _display_name(s)
         lines.append(f"  {i}. {name} — {s['current_streak']} дн. (рекорд: {s['longest_streak']})")
 
-    await message.answer("\n".join(lines))
+    await message.reply("\n".join(lines))

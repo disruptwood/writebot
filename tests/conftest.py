@@ -86,6 +86,7 @@ def make_message(
     msg.author_signature = author_signature
     msg.sender_chat = sender_chat
     msg.answer = AsyncMock()
+    msg.reply = AsyncMock()
     return msg
 
 

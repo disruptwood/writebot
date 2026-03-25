@@ -71,7 +71,7 @@ class TestCmdAddAdmin:
 
         await cmd_add_admin(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert config.STRINGS["not_admin"] == response
 
     async def test_no_reply_rejected(self):
@@ -82,7 +82,7 @@ class TestCmdAddAdmin:
 
         await cmd_add_admin(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "Ответьте" in response
 
     async def test_add_admin_success(self):
@@ -94,7 +94,7 @@ class TestCmdAddAdmin:
         await cmd_add_admin(msg)
 
         assert await queries.is_admin(200)
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "@newadmin" in response
 
 
@@ -110,7 +110,7 @@ class TestCmdRemoveAdmin:
         await cmd_remove_admin(msg)
 
         assert not await queries.is_admin(200)
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "@target" in response
 
     async def test_remove_non_admin(self):
@@ -122,7 +122,7 @@ class TestCmdRemoveAdmin:
         msg = _admin_message(from_user=admin_user, reply_to_user=target_user)
         await cmd_remove_admin(msg)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "не является админом" in response
 
 
@@ -133,7 +133,7 @@ class TestCmdInviteLink:
 
         await cmd_invite_link(msg, make_bot())
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert config.STRINGS["not_admin"] == response
 
     async def test_shows_invite_link(self):
@@ -147,5 +147,5 @@ class TestCmdInviteLink:
 
         await cmd_invite_link(msg, bot)
 
-        response = msg.answer.call_args[0][0]
+        response = msg.reply.call_args[0][0]
         assert "https://t.me/+abc123" in response
