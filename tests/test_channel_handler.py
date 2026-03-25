@@ -1,7 +1,6 @@
 """Tests for channel post handler — tracks posts and updates streaks."""
 
 
-from bot import config
 from bot.db import queries
 from bot.handlers.channel import on_channel_post, _resolve_post_author
 from tests.conftest import make_message, make_user, make_chat, TEST_CHANNEL_ID

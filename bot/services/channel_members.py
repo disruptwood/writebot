@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 
 from aiogram import Bot, types
 
-from bot import config
 from bot.config import ChannelConfig
 from bot.db import queries
 
