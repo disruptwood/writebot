@@ -35,8 +35,21 @@ TEST_CHANNEL = ChannelConfig(
     manual_member_ids=[],
 )
 
+TEST_CHANNEL_2 = ChannelConfig(
+    slug="test2",
+    channel_id=-1001234567891,
+    discussion_group_id=-1009876543211,
+    reminder_chat_id=-1009876543211,
+    name="Test Channel 2",
+    invite_link_name="test2-main",
+    private_commands=False,
+    manual_member_ids=[],
+)
+
 TEST_CHANNEL_ID = TEST_CHANNEL.channel_id
+TEST_CHANNEL_ID_2 = TEST_CHANNEL_2.channel_id
 TEST_GROUP_ID = TEST_CHANNEL.discussion_group_id
+TEST_GROUP_ID_2 = TEST_CHANNEL_2.discussion_group_id
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -44,8 +57,8 @@ async def setup_db(tmp_path):
     """Use a temp file DB for each test and configure test channel."""
     config.DB_PATH = str(tmp_path / "test.db")
 
-    # Set up CHANNELS for tests
-    config.CHANNELS = [TEST_CHANNEL]
+    # Set up CHANNELS for tests (both channels registered for cross-channel tests)
+    config.CHANNELS = [TEST_CHANNEL, TEST_CHANNEL_2]
     config._CHANNEL_BY_CHANNEL_ID = {ch.channel_id: ch for ch in config.CHANNELS}
     config._CHANNEL_BY_GROUP_ID = {ch.discussion_group_id: ch for ch in config.CHANNELS}
     config.ALL_CHANNEL_IDS = {ch.channel_id for ch in config.CHANNELS}

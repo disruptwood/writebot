@@ -103,9 +103,16 @@ async def on_channel_post(message: types.Message):
     await queries.upsert_daily_participation(channel_id, user_id, today, char_count)
     await queries.upsert_member(channel_id, user_id, username, first_name, last_name)
 
-    post_dates = await queries.get_user_post_dates(channel_id, user_id)
+    # Cross-channel streak: count posts from ALL channels
+    post_dates = await queries.get_user_post_dates_cross_channel(user_id)
     current, longest = calculate_streak(post_dates, today)
     await queries.update_streak(channel_id, user_id, username, first_name, current, longest, today)
+
+    # Update streak in other channels the user belongs to
+    other_channel_ids = await queries.get_user_channel_ids(user_id)
+    for other_ch in other_channel_ids:
+        if other_ch != channel_id:
+            await queries.update_streak(other_ch, user_id, username, first_name, current, longest, today)
 
     logger.info(
         "Tracked post from %s (user_id=%s), streak=%d, date=%s, resolved_via=%s, channel=%s",
