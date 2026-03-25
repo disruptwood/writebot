@@ -11,7 +11,9 @@ from bot.services.channel_members import (
     sync_member_from_chat,
     activate_and_promote_member,
 )
-from tests.conftest import make_bot, make_user
+from tests.conftest import make_bot, make_user, TEST_CHANNEL, TEST_CHANNEL_ID
+
+CH = TEST_CHANNEL_ID
 
 
 class TestFormatMemberName:
@@ -53,16 +55,16 @@ class TestEnsureMainInviteLink:
         invite_obj = type("Invite", (), {"invite_link": "https://t.me/+new123"})()
         bot.create_chat_invite_link = AsyncMock(return_value=invite_obj)
 
-        link = await ensure_main_invite_link(bot)
+        link = await ensure_main_invite_link(bot, TEST_CHANNEL)
 
         assert link == "https://t.me/+new123"
         bot.create_chat_invite_link.assert_called_once()
 
     async def test_returns_cached_link(self):
-        await queries.set_state("main_join_request_invite_link", "https://t.me/+cached")
+        await queries.set_state("test:main_join_request_invite_link", "https://t.me/+cached")
 
         bot = make_bot()
-        link = await ensure_main_invite_link(bot)
+        link = await ensure_main_invite_link(bot, TEST_CHANNEL)
 
         assert link == "https://t.me/+cached"
         bot.create_chat_invite_link.assert_not_called()
@@ -70,26 +72,26 @@ class TestEnsureMainInviteLink:
 
 class TestPromoteChannelMember:
     async def test_successful_promotion(self):
-        await queries.activate_member(100, "alice", "Alice", source="test")
+        await queries.activate_member(CH, 100, "alice", "Alice", source="test")
 
         bot = make_bot()
-        result = await promote_channel_member(bot, 100, source="test")
+        result = await promote_channel_member(bot, CH, 100, source="test")
 
         assert result is True
         bot.promote_chat_member.assert_called_once()
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member["is_channel_admin"] == 1
 
     async def test_failed_promotion(self):
-        await queries.activate_member(100, "alice", "Alice", source="test")
+        await queries.activate_member(CH, 100, "alice", "Alice", source="test")
 
         bot = make_bot()
         bot.promote_chat_member = AsyncMock(side_effect=Exception("API error"))
 
-        result = await promote_channel_member(bot, 100, source="test")
+        result = await promote_channel_member(bot, CH, 100, source="test")
 
         assert result is False
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member["is_channel_admin"] == 0
 
 
@@ -102,10 +104,10 @@ class TestSyncMemberFromChat:
         })()
         bot.get_chat_member = AsyncMock(return_value=chat_member)
 
-        result = await sync_member_from_chat(bot, 100, source="test")
+        result = await sync_member_from_chat(bot, CH, 100, source="test")
 
         assert result is True
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member is not None
         assert member["is_active"] == 1
 
@@ -117,7 +119,7 @@ class TestSyncMemberFromChat:
         })()
         bot.get_chat_member = AsyncMock(return_value=chat_member)
 
-        result = await sync_member_from_chat(bot, 100, source="test")
+        result = await sync_member_from_chat(bot, CH, 100, source="test")
 
         assert result is False
 
@@ -125,7 +127,7 @@ class TestSyncMemberFromChat:
         bot = make_bot()
         bot.get_chat_member = AsyncMock(side_effect=Exception("Network error"))
 
-        result = await sync_member_from_chat(bot, 100, source="test")
+        result = await sync_member_from_chat(bot, CH, 100, source="test")
 
         assert result is False
 
@@ -137,11 +139,11 @@ class TestSyncMemberFromChat:
         })()
         bot.get_chat_member = AsyncMock(return_value=chat_member)
 
-        result = await sync_member_from_chat(bot, 100, source="test")
+        result = await sync_member_from_chat(bot, CH, 100, source="test")
 
         assert result is True
         bot.promote_chat_member.assert_not_called()
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member["is_channel_admin"] == 1
 
 
@@ -150,9 +152,9 @@ class TestActivateAndPromoteMember:
         bot = make_bot()
         user = make_user(user_id=100, username="alice", first_name="Alice")
 
-        result = await activate_and_promote_member(bot, user, source="test")
+        result = await activate_and_promote_member(bot, CH, user, source="test")
 
         assert result is True
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member["is_active"] == 1
         assert member["is_channel_admin"] == 1

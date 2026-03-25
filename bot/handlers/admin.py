@@ -6,11 +6,10 @@ from aiogram import Router, types, F, Bot
 from aiogram.filters import Command
 
 from bot.config import (
-    CHANNEL_ID,
-    DISCUSSION_GROUP_ID,
+    ALL_GROUP_IDS,
     INITIAL_ADMIN_ID,
-    REMINDER_CHAT_ID,
     STRINGS,
+    get_channel_by_group_id,
 )
 from bot.db import queries
 from bot.services.channel_members import ensure_main_invite_link
@@ -18,8 +17,8 @@ from bot.services.channel_members import ensure_main_invite_link
 logger = logging.getLogger(__name__)
 router = Router()
 
-# Only in discussion group
-router.message.filter(F.chat.id == DISCUSSION_GROUP_ID)
+# Only in known discussion groups
+router.message.filter(F.chat.id.in_(ALL_GROUP_IDS))
 
 
 async def _check_admin(message: types.Message) -> bool:
@@ -85,7 +84,11 @@ async def cmd_invite_link(message: types.Message, bot: Bot):
         await message.reply(STRINGS["not_admin"])
         return
 
-    invite_link = await ensure_main_invite_link(bot)
+    channel_cfg = get_channel_by_group_id(message.chat.id)
+    if not channel_cfg:
+        return
+
+    invite_link = await ensure_main_invite_link(bot, channel_cfg)
     await message.reply(STRINGS["invite_link"].format(invite_link=invite_link))
 
 
@@ -96,47 +99,43 @@ async def cmd_debug_channel(message: types.Message, bot: Bot):
         await message.reply(STRINGS["not_admin"])
         return
 
+    channel_cfg = get_channel_by_group_id(message.chat.id)
+    if not channel_cfg:
+        return
+
     lines = [
-        f"CHANNEL_ID: {CHANNEL_ID}",
-        f"DISCUSSION_GROUP_ID: {DISCUSSION_GROUP_ID}",
-        f"REMINDER_CHAT_ID: {REMINDER_CHAT_ID}",
+        f"Channel: {channel_cfg.name} ({channel_cfg.slug})",
+        f"CHANNEL_ID: {channel_cfg.channel_id}",
+        f"DISCUSSION_GROUP_ID: {channel_cfg.discussion_group_id}",
+        f"REMINDER_CHAT_ID: {channel_cfg.reminder_chat_id}",
     ]
 
-    # Check channel info
     try:
-        ch = await bot.get_chat(CHANNEL_ID)
-        lines.append(f"Channel: {ch.title} (type={ch.type})")
+        ch = await bot.get_chat(channel_cfg.channel_id)
+        lines.append(f"Channel title: {ch.title} (type={ch.type})")
         lines.append(f"  linked_chat_id: {ch.linked_chat_id}")
     except Exception as e:
         lines.append(f"Channel error: {e}")
 
-    # Check group info
     try:
-        gr = await bot.get_chat(DISCUSSION_GROUP_ID)
-        lines.append(f"Group: {gr.title} (type={gr.type})")
+        gr = await bot.get_chat(channel_cfg.discussion_group_id)
+        lines.append(f"Group title: {gr.title} (type={gr.type})")
         lines.append(f"  linked_chat_id: {gr.linked_chat_id}")
     except Exception as e:
         lines.append(f"Group error: {e}")
 
-    # Check bot's own membership
     try:
         me = await bot.get_me()
-        ch_member = await bot.get_chat_member(CHANNEL_ID, me.id)
+        ch_member = await bot.get_chat_member(channel_cfg.channel_id, me.id)
         lines.append(f"Bot in channel: {ch_member.status}")
     except Exception as e:
         lines.append(f"Bot channel membership error: {e}")
 
     try:
         me = await bot.get_me()
-        gr_member = await bot.get_chat_member(DISCUSSION_GROUP_ID, me.id)
+        gr_member = await bot.get_chat_member(channel_cfg.discussion_group_id, me.id)
         lines.append(f"Bot in group: {gr_member.status}")
     except Exception as e:
         lines.append(f"Bot group membership error: {e}")
-
-    # Recent unattributed posts
-    from bot.db import queries as q
-    invite_link = await q.get_state("main_join_request_invite_link")
-    if invite_link:
-        lines.append(f"Main invite link: {invite_link}")
 
     await message.reply("\n".join(lines))

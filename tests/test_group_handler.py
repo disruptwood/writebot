@@ -4,11 +4,12 @@
 from bot import config
 from bot.db import queries
 from bot.handlers.group import cmd_stats, cmd_missing, cmd_streak, cmd_leaderboard, _display_name
-from tests.conftest import make_message, make_user, make_chat
+from tests.conftest import make_message, make_user, make_chat, TEST_CHANNEL_ID, TEST_GROUP_ID
 
+CH = TEST_CHANNEL_ID
 
 GROUP_CHAT = make_chat(
-    chat_id=config.DISCUSSION_GROUP_ID,
+    chat_id=TEST_GROUP_ID,
     chat_type="supergroup",
     title="Test Discussion",
 )
@@ -41,12 +42,12 @@ class TestCmdStats:
         assert config.STRINGS["stats_empty"] in msg.reply.call_args[0][0]
 
     async def test_stats_with_writers(self):
-        await queries.upsert_member(100, "alice", "Alice")
-        await queries.upsert_member(200, "bob", "Bob")
+        await queries.upsert_member(CH, 100, "alice", "Alice")
+        await queries.upsert_member(CH, 200, "bob", "Bob")
 
         from bot.handlers.group import _today
         today = _today()
-        await queries.upsert_daily_participation(100, today, 50)
+        await queries.upsert_daily_participation(CH, 100, today, 50)
 
         msg = _group_message()
         await cmd_stats(msg)
@@ -58,11 +59,11 @@ class TestCmdStats:
 
 class TestCmdMissing:
     async def test_nobody_missing(self):
-        await queries.upsert_member(100, "alice", "Alice")
+        await queries.upsert_member(CH, 100, "alice", "Alice")
 
         from bot.handlers.group import _today
         today = _today()
-        await queries.upsert_daily_participation(100, today, 50)
+        await queries.upsert_daily_participation(CH, 100, today, 50)
 
         msg = _group_message()
         await cmd_missing(msg)
@@ -71,12 +72,12 @@ class TestCmdMissing:
         assert "Все написали" in response
 
     async def test_some_missing(self):
-        await queries.upsert_member(100, "alice", "Alice")
-        await queries.upsert_member(200, "bob", "Bob")
+        await queries.upsert_member(CH, 100, "alice", "Alice")
+        await queries.upsert_member(CH, 200, "bob", "Bob")
 
         from bot.handlers.group import _today
         today = _today()
-        await queries.upsert_daily_participation(100, today, 50)
+        await queries.upsert_daily_participation(CH, 100, today, 50)
 
         msg = _group_message()
         await cmd_missing(msg)
@@ -99,7 +100,7 @@ class TestCmdStreak:
 
     async def test_with_streak(self):
         user = make_user(user_id=100, first_name="Alice")
-        await queries.update_streak(100, "alice", "Alice", 5, 10, "2024-01-15")
+        await queries.update_streak(CH, 100, "alice", "Alice", 5, 10, "2024-01-15")
 
         msg = _group_message(from_user=user)
         await cmd_streak(msg)
@@ -126,8 +127,8 @@ class TestCmdLeaderboard:
         assert "нет стриков" in response
 
     async def test_leaderboard_with_data(self):
-        await queries.update_streak(100, "alice", "Alice", 5, 5, "2024-01-15")
-        await queries.update_streak(200, "bob", "Bob", 3, 7, "2024-01-15")
+        await queries.update_streak(CH, 100, "alice", "Alice", 5, 5, "2024-01-15")
+        await queries.update_streak(CH, 200, "bob", "Bob", 3, 7, "2024-01-15")
 
         msg = _group_message()
         await cmd_leaderboard(msg)
@@ -136,11 +137,10 @@ class TestCmdLeaderboard:
         assert "Топ" in response
         assert "@alice" in response
         assert "@bob" in response
-        # Alice should be first (higher current streak)
         assert response.index("@alice") < response.index("@bob")
 
     async def test_zero_streak_excluded(self):
-        await queries.update_streak(100, "alice", "Alice", 0, 5, "2024-01-10")
+        await queries.update_streak(CH, 100, "alice", "Alice", 0, 5, "2024-01-10")
 
         msg = _group_message()
         await cmd_leaderboard(msg)

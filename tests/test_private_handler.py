@@ -4,8 +4,9 @@
 from bot import config
 from bot.db import queries
 from bot.handlers.private import cmd_start, cmd_mystats
-from tests.conftest import make_message, make_user, make_chat
+from tests.conftest import make_message, make_user, make_chat, TEST_CHANNEL_ID
 
+CH = TEST_CHANNEL_ID
 
 PRIVATE_CHAT = make_chat(chat_id=100, chat_type="private", title="DM")
 
@@ -39,7 +40,7 @@ class TestCmdMystats:
 
     async def test_with_streak(self):
         user = make_user(user_id=100, first_name="Alice")
-        await queries.update_streak(100, "alice", "Alice", 3, 7, "2024-01-15")
+        await queries.update_streak(CH, 100, "alice", "Alice", 3, 7, "2024-01-15")
 
         msg = _private_message(from_user=user)
         await cmd_mystats(msg)

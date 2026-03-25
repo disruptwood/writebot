@@ -5,12 +5,16 @@ from datetime import UTC, datetime
 from aiogram import Bot, types
 
 from bot import config
+from bot.config import ChannelConfig
 from bot.db import queries
 
 logger = logging.getLogger(__name__)
 
 ACTIVE_MEMBER_STATUSES = {"member", "administrator", "creator"}
-STATE_MAIN_INVITE_LINK = "main_join_request_invite_link"
+
+
+def _state_key_invite_link(slug: str) -> str:
+    return f"{slug}:main_join_request_invite_link"
 
 
 def format_member_name(
@@ -42,25 +46,26 @@ def format_user_mention_html(
     return f'<a href="tg://user?id={user_id}">{html.escape(label)}</a>'
 
 
-async def ensure_main_invite_link(bot: Bot) -> str:
-    existing = await queries.get_state(STATE_MAIN_INVITE_LINK)
+async def ensure_main_invite_link(bot: Bot, channel_cfg: ChannelConfig) -> str:
+    state_key = _state_key_invite_link(channel_cfg.slug)
+    existing = await queries.get_state(state_key)
     if existing:
         return existing
 
     invite = await bot.create_chat_invite_link(
-        config.CHANNEL_ID,
+        channel_cfg.channel_id,
         creates_join_request=True,
-        name=config.BOT_INVITE_LINK_NAME,
+        name=channel_cfg.invite_link_name,
     )
-    await queries.set_state(STATE_MAIN_INVITE_LINK, invite.invite_link)
-    logger.info("Created main join-request invite link for channel %s", config.CHANNEL_ID)
+    await queries.set_state(state_key, invite.invite_link)
+    logger.info("Created main join-request invite link for channel %s", channel_cfg.channel_id)
     return invite.invite_link
 
 
-async def promote_channel_member(bot: Bot, user_id: int, source: str) -> bool:
+async def promote_channel_member(bot: Bot, channel_id: int, user_id: int, source: str) -> bool:
     try:
         await bot.promote_chat_member(
-            config.CHANNEL_ID,
+            channel_id,
             user_id,
             is_anonymous=False,
             can_manage_chat=True,
@@ -81,16 +86,16 @@ async def promote_channel_member(bot: Bot, user_id: int, source: str) -> bool:
             can_manage_tags=False,
         )
     except Exception:
-        logger.exception("Failed to promote member %s in channel", user_id)
+        logger.exception("Failed to promote member %s in channel %s", user_id, channel_id)
         return False
 
-    await queries.set_member_channel_admin(user_id, True, source=source)
+    await queries.set_member_channel_admin(channel_id, user_id, True, source=source)
     return True
 
 
-async def sync_member_from_chat(bot: Bot, user_id: int, source: str) -> bool:
+async def sync_member_from_chat(bot: Bot, channel_id: int, user_id: int, source: str) -> bool:
     try:
-        chat_member = await bot.get_chat_member(config.CHANNEL_ID, user_id)
+        chat_member = await bot.get_chat_member(channel_id, user_id)
     except Exception:
         logger.exception("Failed to fetch chat member %s for sync", user_id)
         return False
@@ -102,6 +107,7 @@ async def sync_member_from_chat(bot: Bot, user_id: int, source: str) -> bool:
         return False
 
     await queries.activate_member(
+        channel_id=channel_id,
         user_id=user.id,
         username=user.username,
         first_name=user.first_name,
@@ -110,20 +116,22 @@ async def sync_member_from_chat(bot: Bot, user_id: int, source: str) -> bool:
     )
 
     if status == "administrator":
-        await queries.set_member_channel_admin(user.id, True, source=f"{source}_already_admin")
+        await queries.set_member_channel_admin(channel_id, user.id, True, source=f"{source}_already_admin")
         return True
 
-    return await promote_channel_member(bot, user.id, source=f"{source}_promotion")
+    return await promote_channel_member(bot, channel_id, user.id, source=f"{source}_promotion")
 
 
 async def activate_and_promote_member(
     bot: Bot,
+    channel_id: int,
     user: types.User,
     source: str,
     joined_at: datetime | None = None,
 ) -> bool:
     joined_at = joined_at or datetime.now(UTC)
     await queries.activate_member(
+        channel_id=channel_id,
         user_id=user.id,
         username=user.username,
         first_name=user.first_name,
@@ -131,4 +139,4 @@ async def activate_and_promote_member(
         joined_at=joined_at,
         source=source,
     )
-    return await promote_channel_member(bot, user.id, source=f"{source}_promotion")
+    return await promote_channel_member(bot, channel_id, user.id, source=f"{source}_promotion")

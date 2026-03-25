@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from aiogram import Router, types
 
-from bot.config import CHANNEL_ID, TIMEZONE
+from bot.config import TIMEZONE, get_channel_by_channel_id
 from bot.db import queries
 from bot.services.streaks import calculate_streak
 
@@ -19,7 +19,7 @@ def _get_local_date() -> str:
     return datetime.now(ZoneInfo(TIMEZONE)).date().isoformat()
 
 
-async def _resolve_post_author(message: types.Message) -> tuple[dict | None, str | None]:
+async def _resolve_post_author(channel_id: int, message: types.Message) -> tuple[dict | None, str | None]:
     user = message.from_user
     if user and not user.is_bot:
         return {
@@ -31,7 +31,7 @@ async def _resolve_post_author(message: types.Message) -> tuple[dict | None, str
 
     author_signature = message.author_signature
     if author_signature:
-        matches = await queries.find_members_by_author_signature(author_signature)
+        matches = await queries.find_members_by_author_signature(channel_id, author_signature)
         if len(matches) == 1:
             return matches[0], "author_signature"
         if len(matches) > 1:
@@ -46,15 +46,20 @@ async def _resolve_post_author(message: types.Message) -> tuple[dict | None, str
 
 @router.channel_post()
 async def on_channel_post(message: types.Message):
-    """Track every post in the monitored channel."""
-    if not message.chat or message.chat.id != CHANNEL_ID:
+    """Track every post in a monitored channel."""
+    if not message.chat:
         return
 
-    author_signature = message.author_signature  # display name string, may be None
+    channel_cfg = get_channel_by_channel_id(message.chat.id)
+    if not channel_cfg:
+        return
+
+    channel_id = channel_cfg.channel_id
+    author_signature = message.author_signature
     char_count = len(message.text or message.caption or "")
     now = datetime.now(UTC)
     today = _get_local_date()
-    resolved_user, resolved_via = await _resolve_post_author(message)
+    resolved_user, resolved_via = await _resolve_post_author(channel_id, message)
 
     if not resolved_user:
         logger.warning(
@@ -66,6 +71,7 @@ async def on_channel_post(message: types.Message):
             char_count,
         )
         await queries.record_post(
+            channel_id=channel_id,
             message_id=message.message_id,
             user_id=None,
             username=None,
@@ -82,6 +88,7 @@ async def on_channel_post(message: types.Message):
     last_name = resolved_user.get("last_name")
 
     await queries.record_post(
+        channel_id=channel_id,
         message_id=message.message_id,
         user_id=user_id,
         username=username,
@@ -93,18 +100,19 @@ async def on_channel_post(message: types.Message):
         resolved_via=resolved_via,
     )
 
-    await queries.upsert_daily_participation(user_id, today, char_count)
-    await queries.upsert_member(user_id, username, first_name, last_name)
+    await queries.upsert_daily_participation(channel_id, user_id, today, char_count)
+    await queries.upsert_member(channel_id, user_id, username, first_name, last_name)
 
-    post_dates = await queries.get_user_post_dates(user_id)
+    post_dates = await queries.get_user_post_dates(channel_id, user_id)
     current, longest = calculate_streak(post_dates, today)
-    await queries.update_streak(user_id, username, first_name, current, longest, today)
+    await queries.update_streak(channel_id, user_id, username, first_name, current, longest, today)
 
     logger.info(
-        "Tracked post from %s (user_id=%s), streak=%d, date=%s, resolved_via=%s",
+        "Tracked post from %s (user_id=%s), streak=%d, date=%s, resolved_via=%s, channel=%s",
         username or first_name,
         user_id,
         current,
         today,
         resolved_via,
+        channel_cfg.slug,
     )

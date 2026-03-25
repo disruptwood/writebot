@@ -1,7 +1,6 @@
 """Tests for membership lifecycle handlers (join requests, member status changes)."""
 
 
-
 from bot.db import queries
 from bot.handlers.membership import on_chat_join_request, on_chat_member
 from tests.conftest import (
@@ -9,7 +8,10 @@ from tests.conftest import (
     make_chat_member_updated,
     make_join_request,
     make_user,
+    TEST_CHANNEL_ID,
 )
+
+CH = TEST_CHANNEL_ID
 
 
 class TestOnChatJoinRequest:
@@ -20,7 +22,7 @@ class TestOnChatJoinRequest:
 
         await on_chat_join_request(join_request)
 
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member is not None
         assert member["status"] == "pending"
         assert member["is_active"] == 0
@@ -34,7 +36,7 @@ class TestOnChatJoinRequest:
 
         await on_chat_join_request(join_request)
 
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member is None
 
     async def test_join_request_from_bot_ignored(self):
@@ -44,7 +46,7 @@ class TestOnChatJoinRequest:
 
         await on_chat_join_request(join_request)
 
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member is None
 
 
@@ -59,11 +61,10 @@ class TestOnChatMember:
 
         await on_chat_member(update, bot)
 
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member is not None
         assert member["status"] == "active"
         assert member["is_active"] == 1
-        # promote_channel_member was called
         bot.promote_chat_member.assert_called_once()
 
     async def test_member_already_admin_skips_promotion(self):
@@ -76,13 +77,13 @@ class TestOnChatMember:
 
         await on_chat_member(update, bot)
 
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member is not None
         assert member["is_channel_admin"] == 1
         bot.promote_chat_member.assert_not_called()
 
     async def test_member_left_marked_inactive(self):
-        await queries.activate_member(100, "alice", "Alice", source="test")
+        await queries.activate_member(CH, 100, "alice", "Alice", source="test")
 
         update = make_chat_member_updated(
             user=make_user(user_id=100, username="alice", first_name="Alice"),
@@ -93,12 +94,12 @@ class TestOnChatMember:
 
         await on_chat_member(update, bot)
 
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member["status"] == "left"
         assert member["is_active"] == 0
 
     async def test_member_kicked_marked(self):
-        await queries.activate_member(100, "alice", "Alice", source="test")
+        await queries.activate_member(CH, 100, "alice", "Alice", source="test")
 
         update = make_chat_member_updated(
             user=make_user(user_id=100, username="alice", first_name="Alice"),
@@ -109,13 +110,13 @@ class TestOnChatMember:
 
         await on_chat_member(update, bot)
 
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member["status"] == "kicked"
 
     async def test_already_kicked_leave_ignored(self):
         """If member was already kicked by enforcement, a follow-up 'left' update shouldn't overwrite."""
-        await queries.activate_member(100, "alice", "Alice", source="test")
-        await queries.mark_member_status(100, "kicked", source="enforcement")
+        await queries.activate_member(CH, 100, "alice", "Alice", source="test")
+        await queries.mark_member_status(CH, 100, "kicked", source="enforcement")
 
         update = make_chat_member_updated(
             user=make_user(user_id=100, username="alice", first_name="Alice"),
@@ -126,7 +127,7 @@ class TestOnChatMember:
 
         await on_chat_member(update, bot)
 
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member["status"] == "kicked"  # Not overwritten to "left"
 
     async def test_wrong_channel_ignored(self):
@@ -140,7 +141,7 @@ class TestOnChatMember:
 
         await on_chat_member(update, bot)
 
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member is None
 
     async def test_bot_user_ignored(self):
@@ -153,5 +154,5 @@ class TestOnChatMember:
 
         await on_chat_member(update, bot)
 
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member is None

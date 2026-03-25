@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock
 from bot import config
 from bot.db import queries
 from bot.handlers.admin import cmd_add_admin, cmd_remove_admin, cmd_invite_link, _check_admin
-from tests.conftest import make_message, make_user, make_chat, make_bot
+from tests.conftest import make_message, make_user, make_chat, make_bot, TEST_GROUP_ID
 
 
 GROUP_CHAT = make_chat(
-    chat_id=config.DISCUSSION_GROUP_ID,
+    chat_id=TEST_GROUP_ID,
     chat_type="supergroup",
     title="Test Discussion",
 )
@@ -45,7 +45,6 @@ class TestCheckAdmin:
     async def test_initial_admin_bootstrap(self, monkeypatch):
         """INITIAL_ADMIN_ID user is auto-added as admin on first check."""
         monkeypatch.setattr(config, "INITIAL_ADMIN_ID", 42)
-        # Also patch the module-level import in admin handler
         from bot.handlers import admin
         monkeypatch.setattr(admin, "INITIAL_ADMIN_ID", 42)
 

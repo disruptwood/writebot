@@ -4,7 +4,9 @@
 from bot import config
 from bot.db import queries
 from bot.handlers.channel import on_channel_post, _resolve_post_author
-from tests.conftest import make_message, make_user, make_chat
+from tests.conftest import make_message, make_user, make_chat, TEST_CHANNEL_ID
+
+CH = TEST_CHANNEL_ID
 
 
 class TestOnChannelPost:
@@ -16,23 +18,20 @@ class TestOnChannelPost:
         msg = make_message(
             message_id=1,
             text="My daily writing post",
-            chat=make_chat(chat_id=config.CHANNEL_ID),
+            chat=make_chat(chat_id=CH),
             from_user=user,
         )
 
         await on_channel_post(msg)
 
-        # Post was recorded
-        dates = await queries.get_user_post_dates(100)
+        dates = await queries.get_user_post_dates(CH, 100)
         assert len(dates) == 1
 
-        # Streak was updated
-        streak = await queries.get_streak(100)
+        streak = await queries.get_streak(CH, 100)
         assert streak is not None
         assert streak["current_streak"] >= 1
 
-        # Member was upserted
-        member = await queries.get_member(100)
+        member = await queries.get_member(CH, 100)
         assert member is not None
         assert member["username"] == "alice"
 
@@ -41,15 +40,14 @@ class TestOnChannelPost:
         msg = make_message(
             message_id=2,
             text="Anonymous post",
-            chat=make_chat(chat_id=config.CHANNEL_ID),
+            chat=make_chat(chat_id=CH),
             from_user=None,
             author_signature=None,
         )
 
         await on_channel_post(msg)
 
-        # No streak or participation — just the raw post in channel_posts
-        dates = await queries.get_user_post_dates(0)
+        dates = await queries.get_user_post_dates(CH, 0)
         assert dates == []
 
     async def test_post_from_wrong_channel_ignored(self):
@@ -64,7 +62,7 @@ class TestOnChannelPost:
 
         await on_channel_post(msg)
 
-        dates = await queries.get_user_post_dates(100)
+        dates = await queries.get_user_post_dates(CH, 100)
         assert dates == []
 
     async def test_post_from_bot_user_treated_as_anonymous(self):
@@ -73,13 +71,13 @@ class TestOnChannelPost:
         msg = make_message(
             message_id=4,
             text="Bot post",
-            chat=make_chat(chat_id=config.CHANNEL_ID),
+            chat=make_chat(chat_id=CH),
             from_user=bot_user,
         )
 
         await on_channel_post(msg)
 
-        dates = await queries.get_user_post_dates(777)
+        dates = await queries.get_user_post_dates(CH, 777)
         assert dates == []
 
     async def test_multiple_posts_same_day_aggregate(self):
@@ -89,15 +87,15 @@ class TestOnChannelPost:
             msg = make_message(
                 message_id=10 + i,
                 text=f"Post #{i}",
-                chat=make_chat(chat_id=config.CHANNEL_ID),
+                chat=make_chat(chat_id=CH),
                 from_user=user,
             )
             await on_channel_post(msg)
 
-        dates = await queries.get_user_post_dates(100)
+        dates = await queries.get_user_post_dates(CH, 100)
         assert len(dates) == 1  # Same day
 
-        streak = await queries.get_streak(100)
+        streak = await queries.get_streak(CH, 100)
         assert streak["current_streak"] == 1
 
     async def test_caption_counted_for_media_posts(self):
@@ -107,13 +105,13 @@ class TestOnChannelPost:
             message_id=5,
             text=None,
             caption="Photo caption text",
-            chat=make_chat(chat_id=config.CHANNEL_ID),
+            chat=make_chat(chat_id=CH),
             from_user=user,
         )
 
         await on_channel_post(msg)
 
-        dates = await queries.get_user_post_dates(100)
+        dates = await queries.get_user_post_dates(CH, 100)
         assert len(dates) == 1
 
     async def test_post_with_no_chat_ignored(self):
@@ -132,7 +130,7 @@ class TestResolvePostAuthor:
         user = make_user(user_id=100, username="alice", first_name="Alice", last_name="Smith")
         msg = make_message(from_user=user)
 
-        result, method = await _resolve_post_author(msg)
+        result, method = await _resolve_post_author(CH, msg)
 
         assert result is not None
         assert result["user_id"] == 100
@@ -142,11 +140,11 @@ class TestResolvePostAuthor:
 
     async def test_resolves_via_author_signature_unique_match(self):
         """When author_signature matches exactly one member, resolve to them."""
-        await queries.activate_member(100, "alice", "Alice", "Smith", source="test")
+        await queries.activate_member(CH, 100, "alice", "Alice", "Smith", source="test")
 
         msg = make_message(from_user=None, author_signature="Alice Smith")
 
-        result, method = await _resolve_post_author(msg)
+        result, method = await _resolve_post_author(CH, msg)
 
         assert result is not None
         assert result["user_id"] == 100
@@ -154,12 +152,12 @@ class TestResolvePostAuthor:
 
     async def test_ambiguous_signature_returns_none(self):
         """When signature matches multiple members, return None."""
-        await queries.activate_member(100, None, "Alice", "Smith", source="test")
-        await queries.activate_member(200, None, "Alice", "Smith", source="test")
+        await queries.activate_member(CH, 100, None, "Alice", "Smith", source="test")
+        await queries.activate_member(CH, 200, None, "Alice", "Smith", source="test")
 
         msg = make_message(from_user=None, author_signature="Alice Smith")
 
-        result, method = await _resolve_post_author(msg)
+        result, method = await _resolve_post_author(CH, msg)
 
         assert result is None
         assert method is None
@@ -168,7 +166,7 @@ class TestResolvePostAuthor:
         """No from_user and no author_signature returns None."""
         msg = make_message(from_user=None, author_signature=None)
 
-        result, method = await _resolve_post_author(msg)
+        result, method = await _resolve_post_author(CH, msg)
 
         assert result is None
         assert method is None
@@ -178,7 +176,7 @@ class TestResolvePostAuthor:
         bot_user = make_user(user_id=777, is_bot=True)
         msg = make_message(from_user=bot_user, author_signature=None)
 
-        result, method = await _resolve_post_author(msg)
+        result, method = await _resolve_post_author(CH, msg)
 
         assert result is None
         assert method is None

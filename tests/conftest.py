@@ -21,12 +21,38 @@ os.environ.setdefault("CHANNEL_ID", "-1001234567890")
 os.environ.setdefault("DISCUSSION_GROUP_ID", "-1009876543210")
 
 from bot import config  # noqa: E402
+from bot.config import ChannelConfig  # noqa: E402
+
+# Test channel config
+TEST_CHANNEL = ChannelConfig(
+    slug="test",
+    channel_id=-1001234567890,
+    discussion_group_id=-1009876543210,
+    reminder_chat_id=-1009876543210,
+    name="Test Channel",
+    invite_link_name="test-main",
+    private_commands=True,
+    manual_member_ids=[],
+)
+
+TEST_CHANNEL_ID = TEST_CHANNEL.channel_id
+TEST_GROUP_ID = TEST_CHANNEL.discussion_group_id
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def setup_db(tmp_path):
-    """Use a temp file DB for each test."""
+    """Use a temp file DB for each test and configure test channel."""
     config.DB_PATH = str(tmp_path / "test.db")
+
+    # Set up CHANNELS for tests
+    config.CHANNELS = [TEST_CHANNEL]
+    config._CHANNEL_BY_CHANNEL_ID = {ch.channel_id: ch for ch in config.CHANNELS}
+    config._CHANNEL_BY_GROUP_ID = {ch.discussion_group_id: ch for ch in config.CHANNELS}
+    config.ALL_CHANNEL_IDS = {ch.channel_id for ch in config.CHANNELS}
+    config.ALL_GROUP_IDS = {ch.discussion_group_id for ch in config.CHANNELS}
+    config.CHANNEL_ID = TEST_CHANNEL.channel_id
+    config.DISCUSSION_GROUP_ID = TEST_CHANNEL.discussion_group_id
+
     from bot.db.models import init_db
     await init_db()
     yield
@@ -53,7 +79,7 @@ def make_user(
 
 
 def make_chat(
-    chat_id: int = config.CHANNEL_ID,
+    chat_id: int = TEST_CHANNEL.channel_id,
     chat_type: str = "channel",
     title: str = "Test Channel",
 ) -> SimpleNamespace:
@@ -105,7 +131,7 @@ def make_bot() -> MagicMock:
 
 
 def make_join_request(
-    chat_id: int = config.CHANNEL_ID,
+    chat_id: int = TEST_CHANNEL.channel_id,
     user: SimpleNamespace | None = None,
 ) -> SimpleNamespace:
     """Create a mock ChatJoinRequest."""
@@ -116,7 +142,7 @@ def make_join_request(
 
 
 def make_chat_member_updated(
-    chat_id: int = config.CHANNEL_ID,
+    chat_id: int = TEST_CHANNEL.channel_id,
     user: SimpleNamespace | None = None,
     old_status: str = "left",
     new_status: str = "member",
