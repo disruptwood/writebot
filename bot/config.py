@@ -122,10 +122,10 @@ STRINGS = {
     "stats_empty": "Сегодня ещё никто не писал. Будьте первым!",
     "streak": "🔥 {name}: стрик {current} дн. (рекорд: {longest})",
     "no_streak": "У {name} пока нет стрика. Время начать!",
-    "missing_header": "⏰ Сегодня ещё не писали:",
+    "missing_header": "Сегодня ещё не писали:",
     "leaderboard_header": "🏆 Топ стриков:",
     "warning_missing": (
-        "⏰ До 00:00 по Израилю сегодня ещё не писали:\n"
+        "До 00:00 по Израилю сегодня ещё не писали:\n"
         "{mentions}"
     ),
     "warning_kick_tonight": (

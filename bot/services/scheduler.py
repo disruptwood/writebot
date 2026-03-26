@@ -27,6 +27,18 @@ STATE_LAST_WARNING_DATE = "last_evening_warning_date"
 STATE_LAST_KICK_DATE = "last_midnight_enforcement_date"
 STATE_WARNING_MESSAGE_ID = "warning_channel_message_id"
 
+CHANNEL_MESSAGE_DELETE_DELAY = 2 * 60 * 60  # 2 hours
+
+
+async def _delete_after_delay(bot: Bot, chat_id: int, message_id: int, delay: int):
+    """Delete a message after a delay (in seconds). Fire-and-forget."""
+    await asyncio.sleep(delay)
+    try:
+        await bot.delete_message(chat_id, message_id)
+        logger.info("Auto-deleted channel message %s after %ss", message_id, delay)
+    except Exception:
+        logger.warning("Could not auto-delete channel message %s", message_id)
+
 
 def _state_key(slug: str, base_key: str) -> str:
     return f"{slug}:{base_key}"
@@ -166,12 +178,13 @@ async def _run_midnight_enforcement(bot: Bot, ch: ChannelConfig, evaluation_date
             mentions=_join_mentions(kicked)
         )
         text = f"{text}\n\n{config.STRINGS['invite_link'].format(invite_link=invite_link)}"
-        await bot.send_message(
+        msg = await bot.send_message(
             ch.channel_id,
             text,
             parse_mode=ParseMode.HTML,
             disable_web_page_preview=True,
         )
+        asyncio.create_task(_delete_after_delay(bot, ch.channel_id, msg.message_id, CHANNEL_MESSAGE_DELETE_DELAY))
         logger.info("Kicked %s inactive members for %s [%s]", len(kicked), evaluation_date, ch.slug)
     else:
         logger.info("No midnight kicks required for %s [%s]", evaluation_date, ch.slug)
