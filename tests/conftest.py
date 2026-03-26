@@ -132,7 +132,8 @@ def make_message(
 def make_bot() -> MagicMock:
     """Create a mock Telegram Bot with common async methods."""
     bot = MagicMock()
-    bot.send_message = AsyncMock()
+    bot.send_message = AsyncMock(return_value=SimpleNamespace(message_id=9999))
+    bot.delete_message = AsyncMock()
     bot.get_chat = AsyncMock()
     bot.get_me = AsyncMock(return_value=make_user(user_id=999, username="testbot", is_bot=True))
     bot.get_chat_member = AsyncMock()

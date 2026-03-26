@@ -13,6 +13,7 @@ from bot.config import (
 )
 from bot.db import queries
 from bot.services.channel_members import ensure_main_invite_link
+from bot.services.scheduler import _send_evening_warning
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -139,3 +140,23 @@ async def cmd_debug_channel(message: types.Message, bot: Bot):
         lines.append(f"Bot group membership error: {e}")
 
     await message.reply("\n".join(lines))
+
+
+@router.message(Command("test_warning"))
+async def cmd_test_warning(message: types.Message, bot: Bot):
+    """Send evening warning now for testing. Admin only."""
+    if not await _check_admin(message):
+        await message.reply(STRINGS["not_admin"])
+        return
+
+    channel_cfg = get_channel_by_group_id(message.chat.id)
+    if not channel_cfg:
+        return
+
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from bot.config import TIMEZONE
+
+    today = datetime.now(ZoneInfo(TIMEZONE)).date().isoformat()
+    await _send_evening_warning(bot, channel_cfg, today)
+    await message.reply(f"✅ Напоминание отправлено в канал (дата: {today})")

@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 STATE_LAST_WARNING_DATE = "last_evening_warning_date"
 STATE_LAST_KICK_DATE = "last_midnight_enforcement_date"
+STATE_WARNING_MESSAGE_ID = "warning_channel_message_id"
 
 
 def _state_key(slug: str, base_key: str) -> str:
@@ -89,14 +90,17 @@ async def _send_evening_warning(bot: Bot, ch: ChannelConfig, evaluation_date: st
             )
         )
 
-    await bot.send_message(
-        ch.reminder_chat_id,
+    msg = await bot.send_message(
+        ch.channel_id,
         "\n\n".join(sections),
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True,
     )
+    # Save message_id so we can delete it at midnight
+    msg_id_key = _state_key(ch.slug, STATE_WARNING_MESSAGE_ID)
+    await queries.set_state(msg_id_key, str(msg.message_id))
     await queries.set_state(warning_key, evaluation_date)
-    logger.info("Sent evening warning for %s [%s]", evaluation_date, ch.slug)
+    logger.info("Sent evening warning to channel for %s [%s], msg_id=%s", evaluation_date, ch.slug, msg.message_id)
 
 
 async def _kick_member(bot: Bot, ch: ChannelConfig, member: dict) -> bool:
@@ -128,7 +132,23 @@ async def _kick_member(bot: Bot, ch: ChannelConfig, member: dict) -> bool:
     return True
 
 
+async def _delete_warning_from_channel(bot: Bot, ch: ChannelConfig):
+    """Delete the evening warning message from the channel if it exists."""
+    msg_id_key = _state_key(ch.slug, STATE_WARNING_MESSAGE_ID)
+    msg_id_raw = await queries.get_state(msg_id_key)
+    if msg_id_raw:
+        try:
+            await bot.delete_message(ch.channel_id, int(msg_id_raw))
+            logger.info("Deleted warning message %s from channel [%s]", msg_id_raw, ch.slug)
+        except Exception:
+            logger.warning("Could not delete warning message %s from channel [%s]", msg_id_raw, ch.slug)
+        await queries.set_state(msg_id_key, "")
+
+
 async def _run_midnight_enforcement(bot: Bot, ch: ChannelConfig, evaluation_date: str):
+    # Clean up the evening warning from the channel
+    await _delete_warning_from_channel(bot, ch)
+
     snapshots = await queries.get_member_compliance_snapshots(ch.channel_id)
     due_for_kick = select_midnight_kick_members(snapshots, evaluation_date)
 
@@ -147,7 +167,7 @@ async def _run_midnight_enforcement(bot: Bot, ch: ChannelConfig, evaluation_date
         )
         text = f"{text}\n\n{config.STRINGS['invite_link'].format(invite_link=invite_link)}"
         await bot.send_message(
-            ch.reminder_chat_id,
+            ch.channel_id,
             text,
             parse_mode=ParseMode.HTML,
             disable_web_page_preview=True,
