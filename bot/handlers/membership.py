@@ -5,7 +5,7 @@ from datetime import UTC
 
 from aiogram import Bot, Router, types
 
-from bot.config import get_channel_by_channel_id
+from bot.config import get_channel_by_channel_id, get_channel_by_group_id
 from bot.db import queries
 from bot.services.channel_members import (
     ACTIVE_MEMBER_STATUSES,
@@ -18,7 +18,7 @@ router = Router()
 
 @router.chat_join_request()
 async def on_chat_join_request(join_request: types.ChatJoinRequest):
-    channel_cfg = get_channel_by_channel_id(join_request.chat.id)
+    channel_cfg = get_channel_by_channel_id(join_request.chat.id) or get_channel_by_group_id(join_request.chat.id)
     if not channel_cfg:
         return
 
@@ -39,7 +39,7 @@ async def on_chat_join_request(join_request: types.ChatJoinRequest):
 
 @router.chat_member()
 async def on_chat_member(update: types.ChatMemberUpdated, bot: Bot):
-    channel_cfg = get_channel_by_channel_id(update.chat.id)
+    channel_cfg = get_channel_by_channel_id(update.chat.id) or get_channel_by_group_id(update.chat.id)
     if not channel_cfg:
         return
 
