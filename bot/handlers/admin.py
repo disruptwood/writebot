@@ -12,8 +12,11 @@ from bot.config import (
     get_channel_by_group_id,
 )
 from bot.db import queries
-from bot.services.channel_members import ensure_main_invite_link
+from bot.services.channel_members import MINIMAL_ADMIN_RIGHTS, ensure_main_invite_link
 from bot.services.scheduler import _send_evening_warning
+
+# User IDs that should keep full admin rights (channel owners/co-owners)
+PROTECTED_ADMIN_IDS = {465585740, 1030913176}  # Ilya, Nastia
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -160,3 +163,56 @@ async def cmd_test_warning(message: types.Message, bot: Bot):
     today = datetime.now(ZoneInfo(TIMEZONE)).date().isoformat()
     await _send_evening_warning(bot, channel_cfg, today)
     await message.reply(f"✅ Напоминание отправлено в канал (дата: {today})")
+
+
+@router.message(Command("fix_admin_perms"))
+async def cmd_fix_admin_perms(message: types.Message, bot: Bot):
+    """Reduce admin rights to post-only for everyone except protected admins. Admin only."""
+    if not await _check_admin(message):
+        await message.reply(STRINGS["not_admin"])
+        return
+
+    channel_cfg = get_channel_by_group_id(message.chat.id)
+    if not channel_cfg:
+        return
+
+    me = await bot.get_me()
+    try:
+        admins = await bot.get_chat_administrators(channel_cfg.channel_id)
+    except Exception as e:
+        await message.reply(f"Не удалось получить список админов канала: {e}")
+        return
+
+    fixed = []
+    skipped = []
+    failed = []
+
+    for admin in admins:
+        user = admin.user
+        if user.is_bot or user.id == me.id:
+            continue
+        if admin.status == "creator":
+            skipped.append(f"{user.first_name or user.username} (creator)")
+            continue
+        if user.id in PROTECTED_ADMIN_IDS:
+            skipped.append(f"{user.first_name or user.username} (protected)")
+            continue
+
+        try:
+            await bot.promote_chat_member(channel_cfg.channel_id, user.id, **MINIMAL_ADMIN_RIGHTS)
+            fixed.append(user.first_name or user.username or str(user.id))
+        except Exception as e:
+            failed.append(f"{user.first_name or user.username}: {e}")
+            logger.exception("Failed to fix perms for %s in %s", user.id, channel_cfg.slug)
+
+    lines = [f"Канал: {channel_cfg.name}"]
+    if fixed:
+        lines.append(f"✅ Уменьшены права ({len(fixed)}): {', '.join(fixed)}")
+    if skipped:
+        lines.append(f"⏭ Пропущены ({len(skipped)}): {', '.join(skipped)}")
+    if failed:
+        lines.append(f"❌ Ошибки ({len(failed)}):\n" + "\n".join(failed))
+    if not fixed and not skipped and not failed:
+        lines.append("Никого не нашлось.")
+
+    await message.reply("\n".join(lines))

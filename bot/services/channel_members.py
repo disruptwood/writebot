@@ -61,29 +61,30 @@ async def ensure_main_invite_link(bot: Bot, channel_cfg: ChannelConfig) -> str:
     return invite.invite_link
 
 
+MINIMAL_ADMIN_RIGHTS = dict(
+    is_anonymous=False,
+    can_manage_chat=False,
+    can_delete_messages=False,
+    can_manage_video_chats=False,
+    can_restrict_members=False,
+    can_promote_members=False,
+    can_change_info=False,
+    can_invite_users=False,
+    can_post_stories=False,
+    can_edit_stories=False,
+    can_delete_stories=False,
+    can_post_messages=True,
+    can_edit_messages=False,
+    can_pin_messages=False,
+    can_manage_topics=False,
+    can_manage_direct_messages=False,
+    can_manage_tags=False,
+)
+
+
 async def promote_channel_member(bot: Bot, channel_id: int, user_id: int, source: str) -> bool:
     try:
-        await bot.promote_chat_member(
-            channel_id,
-            user_id,
-            is_anonymous=False,
-            can_manage_chat=True,
-            can_delete_messages=True,
-            can_manage_video_chats=False,
-            can_restrict_members=False,
-            can_promote_members=False,
-            can_change_info=False,
-            can_invite_users=False,
-            can_post_stories=False,
-            can_edit_stories=False,
-            can_delete_stories=False,
-            can_post_messages=True,
-            can_edit_messages=True,
-            can_pin_messages=False,
-            can_manage_topics=False,
-            can_manage_direct_messages=False,
-            can_manage_tags=False,
-        )
+        await bot.promote_chat_member(channel_id, user_id, **MINIMAL_ADMIN_RIGHTS)
     except Exception:
         logger.exception("Failed to promote member %s in channel %s", user_id, channel_id)
         return False
