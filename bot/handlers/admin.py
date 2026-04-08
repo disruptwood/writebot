@@ -1,8 +1,10 @@
 """Admin-only commands for managing the writing channel."""
 
+import asyncio
 import logging
 
 from aiogram import Router, types, F, Bot
+from aiogram.exceptions import TelegramRetryAfter
 from aiogram.filters import Command
 
 from bot.config import (
@@ -199,8 +201,13 @@ async def cmd_fix_admin_perms(message: types.Message, bot: Bot):
             continue
 
         try:
-            await bot.promote_chat_member(channel_cfg.channel_id, user.id, **MINIMAL_ADMIN_RIGHTS)
+            try:
+                await bot.promote_chat_member(channel_cfg.channel_id, user.id, **MINIMAL_ADMIN_RIGHTS)
+            except TelegramRetryAfter as e:
+                await asyncio.sleep(e.retry_after + 1)
+                await bot.promote_chat_member(channel_cfg.channel_id, user.id, **MINIMAL_ADMIN_RIGHTS)
             fixed.append(user.first_name or user.username or str(user.id))
+            await asyncio.sleep(1.5)  # stay under flood limit
         except Exception as e:
             failed.append(f"{user.first_name or user.username}: {e}")
             logger.exception("Failed to fix perms for %s in %s", user.id, channel_cfg.slug)
