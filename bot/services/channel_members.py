@@ -115,7 +115,7 @@ async def sync_member_from_chat(bot: Bot, channel_id: int, user_id: int, source:
         source=source,
     )
 
-    if status == "administrator":
+    if status in {"administrator", "creator"}:
         await queries.set_member_channel_admin(channel_id, user.id, True, source=f"{source}_already_admin")
         return True
 

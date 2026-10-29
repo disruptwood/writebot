@@ -74,6 +74,7 @@ async def on_chat_member(update: types.ChatMemberUpdated, bot: Bot):
             )
         else:
             await promote_channel_member(bot, channel_id, user.id, source="chat_member_sync")
+        logger.info("Activated user %s from membership event in chat %s [%s]", user.id, update.chat.id, channel_cfg.slug)
         return
 
     if old_status in ACTIVE_MEMBER_STATUSES and new_status in {"left", "kicked"}:

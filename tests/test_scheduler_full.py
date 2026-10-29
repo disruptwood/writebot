@@ -50,7 +50,7 @@ class TestSendEveningWarning:
         assert "bob" in text.lower()
 
     async def test_kick_warning_included_for_overdue_members(self):
-        """Members overdue for 2+ days should get kick warning in addition to missing warning."""
+        """Members overdue for 3+ days should get kick warning in addition to missing warning."""
         await queries.activate_member(CH, 100, "alice", "Alice", source="test",
                                       joined_at=datetime(2024, 1, 10, tzinfo=ZoneInfo("UTC")))
         await queries.upsert_daily_participation(CH, 100, "2024-01-12", 50)
@@ -90,7 +90,7 @@ class TestKickMember:
 
 class TestRunMidnightEnforcement:
     async def test_kicks_overdue_members(self):
-        """Members with 2+ days without posts should be kicked."""
+        """Members with 3+ days without posts should be kicked."""
         await queries.activate_member(CH, 100, "alice", "Alice", source="test",
                                       joined_at=datetime(2024, 1, 1, tzinfo=ZoneInfo("UTC")))
         await queries.set_state(

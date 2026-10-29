@@ -34,15 +34,15 @@ def is_due_for_midnight_kick(
     if joined is None:
         return False
 
-    # Users get their first two calendar days in the channel before removal.
-    if joined > evaluation - timedelta(days=1):
+    # Include the joining day in the three-calendar-day grace period.
+    if joined > evaluation - timedelta(days=2):
         return False
 
     last_post = _parse_iso_date(last_post_date)
     if last_post is None:
         return True
 
-    return last_post < evaluation - timedelta(days=1)
+    return last_post < evaluation - timedelta(days=2)
 
 
 def evaluate_member(snapshot: dict, evaluation_date: str) -> ComplianceState:

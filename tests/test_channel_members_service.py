@@ -96,6 +96,19 @@ class TestPromoteChannelMember:
 
 
 class TestSyncMemberFromChat:
+    async def test_owner_synced_without_promotion(self):
+        bot = make_bot()
+        chat_member = type("CM", (), {
+            "user": make_user(user_id=100),
+            "status": "creator",
+        })()
+        bot.get_chat_member = AsyncMock(return_value=chat_member)
+
+        assert await sync_member_from_chat(bot, CH, 100, source="test") is True
+        bot.promote_chat_member.assert_not_called()
+        member = await queries.get_member(CH, 100)
+        assert member["is_channel_admin"] == 1
+
     async def test_active_member_synced_and_promoted(self):
         bot = make_bot()
         chat_member = type("CM", (), {

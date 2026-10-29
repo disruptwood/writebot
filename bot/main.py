@@ -73,7 +73,7 @@ async def run_polling():
     dp = _setup_dispatcher()
 
     await init_db()
-    await bot.delete_webhook(drop_pending_updates=True)
+    await bot.delete_webhook(drop_pending_updates=False)
 
     scheduler_task = asyncio.create_task(start_scheduler(bot))
     logger.info("Starting polling mode")

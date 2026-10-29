@@ -2,6 +2,7 @@
 
 
 from bot.db import queries
+import pytest
 from bot.handlers.membership import on_chat_join_request, on_chat_member
 from tests.conftest import (
     make_bot,
@@ -51,6 +52,24 @@ class TestOnChatJoinRequest:
 
 
 class TestOnChatMember:
+    @pytest.mark.parametrize("previous_status", ["kicked", "left"])
+    @pytest.mark.parametrize("new_status", ["member", "administrator"])
+    async def test_returning_member_starts_fresh_on_membership_event(self, previous_status, new_status):
+        await queries.activate_member(CH, 100, "alice", "Alice", source="test")
+        await queries.upsert_daily_participation(CH, 100, "2024-01-01", 50)
+        await queries.update_streak(CH, 100, "alice", "Alice", 2, 5, "2024-01-01")
+        await queries.mark_member_status(CH, 100, previous_status, source="test")
+        update = make_chat_member_updated(old_status="left", new_status=new_status)
+
+        await on_chat_member(update, make_bot())
+
+        member = await queries.get_member(CH, 100)
+        assert member["status"] == "active"
+        assert member["is_active"] == 1
+        assert member["joined_date"] is not None
+        assert await queries.get_user_post_dates(CH, 100) == []
+        assert await queries.get_streak(CH, 100) is None
+
     async def test_member_joined_activates_and_promotes(self):
         update = make_chat_member_updated(
             user=make_user(user_id=100, username="alice", first_name="Alice"),

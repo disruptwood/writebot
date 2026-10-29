@@ -31,17 +31,23 @@ class TestEnforcementRules:
     def test_new_member_is_not_due_for_kick_on_first_day(self):
         assert is_due_for_midnight_kick("2024-01-15", None, "2024-01-15") is False
 
-    def test_second_day_without_posts_is_due_for_kick(self):
-        assert is_due_for_midnight_kick("2024-01-14", None, "2024-01-15") is True
+    def test_second_day_without_posts_is_safe(self):
+        assert is_due_for_midnight_kick("2024-01-14", None, "2024-01-15") is False
+
+    def test_third_day_without_posts_is_due_for_kick(self):
+        assert is_due_for_midnight_kick("2024-01-13", None, "2024-01-15") is True
 
     def test_post_yesterday_keeps_member_safe(self):
         assert is_due_for_midnight_kick("2024-01-10", "2024-01-14", "2024-01-15") is False
 
-    def test_post_day_before_yesterday_is_not_enough(self):
-        assert is_due_for_midnight_kick("2024-01-10", "2024-01-13", "2024-01-15") is True
+    def test_post_day_before_yesterday_keeps_member_safe(self):
+        assert is_due_for_midnight_kick("2024-01-10", "2024-01-13", "2024-01-15") is False
+
+    def test_three_days_without_posts_is_due_for_kick(self):
+        assert is_due_for_midnight_kick("2024-01-10", "2024-01-12", "2024-01-15") is True
 
     def test_evaluate_member_combines_flags(self):
-        state = evaluate_member(_snapshot(1, "2024-01-14", None), "2024-01-15")
+        state = evaluate_member(_snapshot(1, "2024-01-13", None), "2024-01-15")
         assert state.missing_today is True
         assert state.due_for_midnight_kick is True
 
@@ -50,7 +56,7 @@ class TestEnforcementRules:
             [
                 _snapshot(1, "2024-01-15", None),
                 _snapshot(2, "2024-01-10", "2024-01-14"),
-                _snapshot(3, "2024-01-10", "2024-01-13"),
+                _snapshot(3, "2024-01-10", "2024-01-12"),
                 _snapshot(4, "2024-01-10", "2024-01-15"),
             ],
             "2024-01-15",
@@ -63,7 +69,7 @@ class TestEnforcementRules:
             [
                 _snapshot(1, "2024-01-15", None),
                 _snapshot(2, "2024-01-10", "2024-01-14"),
-                _snapshot(3, "2024-01-10", "2024-01-13"),
+                _snapshot(3, "2024-01-10", "2024-01-12"),
             ],
             "2024-01-15",
         )
